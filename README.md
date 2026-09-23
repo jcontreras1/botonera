@@ -10,6 +10,8 @@ También incluye algunos efectos curiosos y difíciles de encontrar.
 - **Sonidos icónicos** de la cultura popular argentina.  
 - Efectos raros y divertidos para sorprender a tus amigos.  
 - Interfaz sencilla tipo botonera: hacé clic y soná.  
+- Modo **solapar audios** con switch visual y atajo de teclado **F7**.  
+- Indicador LED rojo en cada botón para ver qué sonido está reproduciéndose.  
 - Funciona en cualquier navegador moderno.  
 
 ---

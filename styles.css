@@ -41,6 +41,78 @@ body {
     padding-top: 40px;
 }
 
+.playback-options {
+    margin-bottom: 1rem;
+}
+
+.fancy-checkbox {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.65rem;
+    border: 1px solid #dee2e6;
+    border-radius: 999px;
+    background: white;
+    padding: 0.45rem 0.8rem;
+    cursor: pointer;
+    user-select: none;
+    box-shadow: 0 4px 10px rgba(13, 110, 253, 0.12);
+}
+
+.fancy-checkbox input {
+    position: absolute;
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+
+.fancy-checkbox-slider {
+    position: relative;
+    width: 46px;
+    height: 24px;
+    border-radius: 999px;
+    background: #adb5bd;
+    transition: background-color 0.2s ease;
+}
+
+.fancy-checkbox-slider::before {
+    content: "";
+    position: absolute;
+    left: 2px;
+    top: 2px;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: #fff;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.25);
+    transition: transform 0.2s ease;
+}
+
+.fancy-checkbox input:checked + .fancy-checkbox-slider {
+    background: #0d6efd;
+}
+
+.fancy-checkbox input:checked + .fancy-checkbox-slider::before {
+    transform: translateX(22px);
+}
+
+.fancy-checkbox-text {
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: #0d6efd;
+}
+
+kbd {
+    font-family: inherit;
+    font-size: 0.8rem;
+    font-weight: 700;
+    border: 1px solid #ced4da;
+    border-bottom-width: 2px;
+    border-radius: 4px;
+    padding: 1px 5px;
+    color: #495057;
+    background: #f8f9fa;
+}
+
 button {
     font-size: 1rem;
     text-align: center;
@@ -61,6 +133,32 @@ button.btn-outline-primary {
 button.btn-outline-primary:hover {
     background-color: #0d6efd;
     color: white;
+}
+
+button.reproducir {
+    position: relative;
+}
+
+button.reproducir::after {
+    content: "";
+    position: absolute;
+    top: 5px;
+    right: 5px;
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    background: #ff1f1f;
+    opacity: 0;
+    transform: scale(0.7);
+    box-shadow: 0 0 0 rgba(255, 31, 31, 0);
+    transition: opacity 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease;
+    pointer-events: none;
+}
+
+button.reproducir.is-playing::after {
+    opacity: 1;
+    transform: scale(1);
+    box-shadow: 0 0 8px rgba(255, 31, 31, 0.85);
 }
 
 button.btn-sm {
