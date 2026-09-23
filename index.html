@@ -9,6 +9,13 @@
 
 	<button id="stop" class="boton-flotante">STOP</button>
 	<div class="container-fluid pt-2">
+		<div class="playback-options">
+			<label class="fancy-checkbox" for="overlapToggle">
+				<input id="overlapToggle" type="checkbox">
+				<span class="fancy-checkbox-slider" aria-hidden="true"></span>
+				<span class="fancy-checkbox-text">Solapar audios <kbd>F7</kbd></span>
+			</label>
+		</div>
 
 		<h4>Hot</h4>
 		<div class="row">
@@ -189,54 +196,86 @@
 			<button data-file="rusia" class="h-100 btn btn-outline-primary reproducir col-6 col-md-3 col-lg-1 mb-1">Himno Rusia</button>
 		</div>
 
-		<audio id="audioElement">
-			<source id="src" src="audioFiles/bluesHot.mp3" type="audio/mpeg">
-				Tu navegador no soporta la reproducción de audio.
-			</audio>
+		<script>
+			const stop = document.getElementById('stop');
+			const overlapToggle = document.getElementById('overlapToggle');
+			const audios = document.querySelectorAll('.reproducir');
+			const activeAudios = new Set();
+			const activeButtons = new Map();
 
-			<script>
-				const audioElement = document.getElementById('audioElement');
-				const stop = document.getElementById('stop');
-				const src = document.getElementById('src');
-				const audios = document.querySelectorAll('.reproducir');
+			const markButtonAsPlaying = (button) => {
+				const activeCount = (activeButtons.get(button) || 0) + 1;
+				activeButtons.set(button, activeCount);
+				button.classList.add('is-playing');
+			};
 
-            // Add spacebar event listener to stop audio
-				document.addEventListener('keydown', function(e) {
-					if (e.code === 'Space') {
-                    e.preventDefault(); // Prevent default spacebar scrolling
-                    stopAudio();
-                }
-            });
+			const unmarkButtonAsPlaying = (button) => {
+				const activeCount = (activeButtons.get(button) || 0) - 1;
 
-				for (const [index, value] of audios.entries()) {
-					// value.innerHTML = "(" + (index + 1) + ") " + value.innerHTML;
-					value.addEventListener('click', (e) => {
-                    e.preventDefault(); // Prevent default click behavior
-                    setPista(e.target.dataset['file']);
-                });
+				if (activeCount <= 0) {
+					activeButtons.delete(button);
+					button.classList.remove('is-playing');
+					return;
 				}
 
-				stop.addEventListener('click', () => {
+				activeButtons.set(button, activeCount);
+			};
+
+			const stopAudio = () => {
+				for (const audio of activeAudios) {
+					audio.pause();
+					audio.currentTime = 0;
+				}
+
+				activeAudios.clear();
+				activeButtons.clear();
+				audios.forEach((button) => button.classList.remove('is-playing'));
+			};
+
+			const playTrack = (trackName, button) => {
+				if (!overlapToggle.checked) {
 					stopAudio();
+				}
+
+				const audio = new Audio(`audioFiles/${trackName}.mp3`);
+				activeAudios.add(audio);
+				markButtonAsPlaying(button);
+
+				const cleanup = () => {
+					activeAudios.delete(audio);
+					unmarkButtonAsPlaying(button);
+				};
+
+				audio.addEventListener('ended', cleanup, { once: true });
+				audio.addEventListener('error', cleanup, { once: true });
+
+				audio.play().catch(() => {
+					cleanup();
 				});
+			};
 
-				const stopAudio = () => {
-					audioElement.pause();
-					audioElement.currentTime = 0;
+			document.addEventListener('keydown', (event) => {
+				if (event.code === 'Space') {
+					event.preventDefault();
+					stopAudio();
+					return;
 				}
 
-				const setPista = (pista) => {
-					src.src = `audioFiles/${pista}.mp3`;
-					play();
+				if (event.code === 'F7') {
+					event.preventDefault();
+					overlapToggle.checked = !overlapToggle.checked;
 				}
+			});
 
-				const play = () => {
-					audioElement.pause();
-					audioElement.load();
-					audioElement.currentTime = 0;
-					audioElement.play();
-				}
-			</script>
+			for (const button of audios) {
+				button.addEventListener('click', (event) => {
+					event.preventDefault();
+					playTrack(event.currentTarget.dataset.file, event.currentTarget);
+				});
+			}
+
+			stop.addEventListener('click', stopAudio);
+		</script>
 		</div>
 	</body>
 	</html>
