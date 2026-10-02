@@ -42,7 +42,10 @@ body {
 }
 
 .playback-options {
-    margin-bottom: 1rem;
+    position: fixed;
+    top: 15px;
+    right: 20px;
+    z-index: 9998;
 }
 
 .fancy-checkbox {
