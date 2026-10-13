@@ -66,6 +66,7 @@
 			<button data-file="newXFiles" class="h-100 btn btn-outline-primary reproducir col-6 col-md-3 col-lg-1 mb-1">newXFiles</button>
 			<button data-file="magic" class="h-100 btn btn-outline-primary reproducir col-6 col-md-3 col-lg-1 mb-1">magic</button>
 			<button data-file="aplausos" class="h-100 btn btn-outline-primary reproducir col-6 col-md-3 col-lg-1 mb-1">aplausos</button>
+			<button data-file="camaRechinando" class="h-100 btn btn-outline-primary reproducir col-6 col-md-3 col-lg-1 mb-1">camaRechinando</button>
 		</div>
 
 		<h4 class="mb-1">Vocals</h4>
@@ -210,6 +211,79 @@
 			const audios = document.querySelectorAll('.reproducir');
 			const activeAudios = new Set();
 			const activeButtons = new Map();
+			const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+			const audioContext = AudioContextClass ? new AudioContextClass() : null;
+			const decodedTracks = new Map();
+			const loadingTracks = new Map();
+			const preloadedTracks = new Map();
+			const trackNames = [...new Set(
+				Array.from(audios)
+					.map((button) => button.dataset.file)
+					.filter(Boolean)
+			)];
+
+			const reportAudioError = (trackName, error) => {
+				console.error(`No se pudo cargar/reproducir "${trackName}"`, error);
+			};
+
+			const loadTrackBuffer = async (trackName) => {
+				if (decodedTracks.has(trackName)) {
+					return decodedTracks.get(trackName);
+				}
+
+				if (loadingTracks.has(trackName)) {
+					return loadingTracks.get(trackName);
+				}
+
+				const loadPromise = (async () => {
+					const response = await fetch(`audioFiles/${trackName}.mp3`);
+					if (!response.ok) {
+						throw new Error(`HTTP ${response.status} al cargar ${trackName}`);
+					}
+
+					const audioFileData = await response.arrayBuffer();
+					const audioBuffer = await audioContext.decodeAudioData(audioFileData);
+					decodedTracks.set(trackName, audioBuffer);
+					return audioBuffer;
+				})();
+
+				loadingTracks.set(trackName, loadPromise);
+
+				try {
+					return await loadPromise;
+				} finally {
+					loadingTracks.delete(trackName);
+				}
+			};
+
+			const preloadTracks = async () => {
+				if (audioContext) {
+					const preloadResults = await Promise.allSettled(
+						trackNames.map((trackName) => loadTrackBuffer(trackName))
+					);
+
+					preloadResults.forEach((result, index) => {
+						if (result.status === 'rejected') {
+							reportAudioError(trackNames[index], result.reason);
+						}
+					});
+
+					return;
+				}
+
+				for (const trackName of trackNames) {
+					const audio = new Audio(`audioFiles/${trackName}.mp3`);
+					audio.preload = 'auto';
+					audio.load();
+					preloadedTracks.set(trackName, audio);
+				}
+			};
+
+			const ensureAudioContextReady = async () => {
+				if (audioContext && audioContext.state === 'suspended') {
+					await audioContext.resume();
+				}
+			};
 
 			const markButtonAsPlaying = (button) => {
 				const activeCount = (activeButtons.get(button) || 0) + 1;
@@ -230,9 +304,8 @@
 			};
 
 			const stopAudio = () => {
-				for (const audio of activeAudios) {
-					audio.pause();
-					audio.currentTime = 0;
+				for (const player of activeAudios) {
+					player.stop();
 				}
 
 				activeAudios.clear();
@@ -240,26 +313,89 @@
 				audios.forEach((button) => button.classList.remove('is-playing'));
 			};
 
-			const playTrack = (trackName, button) => {
+			const playTrack = async (trackName, button) => {
 				if (!overlapToggle.checked) {
 					stopAudio();
 				}
 
-				const audio = new Audio(`audioFiles/${trackName}.mp3`);
-				activeAudios.add(audio);
 				markButtonAsPlaying(button);
+				let player = null;
+				let wasCleaned = false;
 
 				const cleanup = () => {
-					activeAudios.delete(audio);
+					if (wasCleaned) {
+						return;
+					}
+
+					wasCleaned = true;
+					if (player) {
+						activeAudios.delete(player);
+					}
 					unmarkButtonAsPlaying(button);
 				};
 
-				audio.addEventListener('ended', cleanup, { once: true });
-				audio.addEventListener('error', cleanup, { once: true });
+				try {
+					if (audioContext) {
+						const audioBuffer = await loadTrackBuffer(trackName);
+						await ensureAudioContextReady();
+						const source = audioContext.createBufferSource();
+						source.buffer = audioBuffer;
+						source.connect(audioContext.destination);
+						let wasStopped = false;
 
-				audio.play().catch(() => {
+						player = {
+							stop: () => {
+								if (wasStopped) {
+									return;
+								}
+
+								wasStopped = true;
+								source.stop();
+								source.disconnect();
+								cleanup();
+							}
+						};
+
+						source.onended = () => {
+							source.disconnect();
+							cleanup();
+						};
+
+						activeAudios.add(player);
+						source.start(0);
+						return;
+					}
+
+					const preloadedAudio = preloadedTracks.get(trackName);
+					const audio = preloadedAudio ? preloadedAudio.cloneNode(true) : new Audio(`audioFiles/${trackName}.mp3`);
+					let wasStopped = false;
+
+					player = {
+						stop: () => {
+							if (wasStopped) {
+								return;
+							}
+
+							wasStopped = true;
+							audio.pause();
+							audio.currentTime = 0;
+							cleanup();
+						}
+					};
+
+					audio.addEventListener('ended', cleanup, { once: true });
+					audio.addEventListener('error', cleanup, { once: true });
+					activeAudios.add(player);
+
+					audio.play().catch((error) => {
+						reportAudioError(trackName, error);
+						cleanup();
+					});
+				} catch (error) {
+					reportAudioError(trackName, error);
 					cleanup();
-				});
+				}
+
 			};
 
 			document.addEventListener('keydown', (event) => {
@@ -283,6 +419,9 @@
 			}
 
 			stop.addEventListener('click', stopAudio);
+			preloadTracks().catch((error) => {
+				console.error('Falló la precarga de audio', error);
+			});
 		</script>
 		</div>
 	</body>
