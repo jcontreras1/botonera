@@ -142,6 +142,20 @@ button.reproducir {
     position: relative;
 }
 
+button.reproducir.full::before {
+    content: "";
+    position: absolute;
+    top: 3px;
+    bottom: 3px;
+    left: 50%;
+    width: 2px;
+    border-radius: 2px;
+    background: currentColor;
+    opacity: 0.55;
+    transform: translateX(-50%);
+    pointer-events: none;
+}
+
 button.reproducir::after {
     content: "";
     position: absolute;
