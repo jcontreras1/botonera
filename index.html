@@ -15,6 +15,16 @@
 				<span class="fancy-checkbox-slider" aria-hidden="true"></span>
 				<span class="fancy-checkbox-text">Solapar audios <kbd>F7</kbd></span>
 			</label>
+			<label class="fancy-checkbox" for="echoToggle">
+				<input id="echoToggle" type="checkbox">
+				<span class="fancy-checkbox-slider" aria-hidden="true"></span>
+				<span class="fancy-checkbox-text">Eco al final</span>
+			</label>
+			<label class="fancy-checkbox" for="turntableToggle">
+				<input id="turntableToggle" type="checkbox">
+				<span class="fancy-checkbox-slider" aria-hidden="true"></span>
+				<span class="fancy-checkbox-text">Frenar tipo bandeja</span>
+			</label>
 		</div>
 
 		<h4>Hot</h4>
@@ -149,6 +159,9 @@
 			<!-- <button data-file="saludoMagoSinDientes" class="h-100 btn btn-outline-primary reproducir col-6 col-md-3 col-lg-1 mb-1">saludoMagoSinDientes</button> -->
 			<button data-file="chauTinelli" class="h-100 btn btn-outline-primary reproducir col-6 col-md-3 col-lg-1 mb-1">chauTinelli</button>
 			<button data-file="perfectoCaballero" class="h-100 btn btn-outline-primary reproducir col-6 col-md-3 col-lg-1 mb-1 full">perfectoCaballero</button>
+			<button data-file="culoLlenoPreguntas" class="h-100 btn btn-outline-primary reproducir col-6 col-md-3 col-lg-1 mb-1">culoLlenoPreguntas</button>
+			<button data-file="estoyConforme" class="h-100 btn btn-outline-primary reproducir col-6 col-md-3 col-lg-1 mb-1">estoyConforme</button>
+			<button data-file="noLaburaNadie" class="h-100 btn btn-outline-primary reproducir col-6 col-md-3 col-lg-1 mb-1">noLaburaNadie</button>
 
 
 		</div>
@@ -211,11 +224,15 @@
 		<script>
 			const stop = document.getElementById('stop');
 			const overlapToggle = document.getElementById('overlapToggle');
+			const echoToggle = document.getElementById('echoToggle');
+			const turntableToggle = document.getElementById('turntableToggle');
 			const audios = document.querySelectorAll('.reproducir');
 			const activeAudios = new Set();
 			const activeButtons = new Map();
 			const AudioContextClass = window.AudioContext || window.webkitAudioContext;
 			const audioContext = AudioContextClass ? new AudioContextClass() : null;
+			const echoTailSeconds = 2.5;
+			const turntableBrakeSeconds = 1.5;
 			const decodedTracks = new Map();
 			const loadingTracks = new Map();
 			const preloadedTracks = new Map();
@@ -311,14 +328,57 @@
 				activeButtons.set(button, activeCount);
 			};
 
-			const stopAudio = () => {
+			const stopAudio = (withEffects = false) => {
 				for (const player of activeAudios) {
-					player.stop();
+					player.stop(withEffects);
 				}
 
 				activeAudios.clear();
 				activeButtons.clear();
 				audios.forEach((button) => button.classList.remove('is-playing'));
+			};
+
+			const createEchoNodes = (source) => {
+				const dry = audioContext.createGain();
+				const delay = audioContext.createDelay();
+				const feedback = audioContext.createGain();
+				const wet = audioContext.createGain();
+
+				dry.gain.value = 1;
+				delay.delayTime.value = 0.28;
+				feedback.gain.value = 0;
+				wet.gain.value = 0;
+
+				source.connect(dry);
+				dry.connect(audioContext.destination);
+				source.connect(delay);
+				delay.connect(feedback);
+				feedback.connect(delay);
+				delay.connect(wet);
+				wet.connect(audioContext.destination);
+
+				return {
+					startTail: () => {
+						const now = audioContext.currentTime;
+						feedback.gain.setValueAtTime(0.38, now);
+						wet.gain.cancelScheduledValues(now);
+						wet.gain.setValueAtTime(0, now);
+						wet.gain.linearRampToValueAtTime(0.5, now + 0.03);
+						wet.gain.linearRampToValueAtTime(0, now + echoTailSeconds);
+					},
+					fadeDry: () => {
+						const now = audioContext.currentTime;
+						dry.gain.cancelScheduledValues(now);
+						dry.gain.setValueAtTime(dry.gain.value, now);
+						dry.gain.linearRampToValueAtTime(0, now + 0.03);
+					},
+					disconnect: () => {
+						dry.disconnect();
+						delay.disconnect();
+						feedback.disconnect();
+						wet.disconnect();
+					}
+				};
 			};
 
 			const playTrack = async (trackName, button) => {
@@ -348,24 +408,85 @@
 						await ensureAudioContextReady();
 						const source = audioContext.createBufferSource();
 						source.buffer = audioBuffer;
-						source.connect(audioContext.destination);
+						const output = audioContext.createGain();
+						source.connect(output);
+						const echoNodes = echoToggle.checked
+							? createEchoNodes(output)
+							: null;
+						if (!echoNodes) {
+							output.connect(audioContext.destination);
+						}
 						let wasStopped = false;
+						let sourceEnded = false;
+						let tailTimeout = null;
+
+						const disconnectAudio = () => {
+							source.disconnect();
+							output.disconnect();
+							echoNodes?.disconnect();
+						};
+
+						const finishTail = () => {
+							clearTimeout(tailTimeout);
+							disconnectAudio();
+							cleanup();
+						};
 
 						player = {
-							stop: () => {
+							stop: (withEffects = false) => {
 								if (wasStopped) {
 									return;
 								}
 
 								wasStopped = true;
-								source.stop();
-								source.disconnect();
+								if (withEffects && turntableToggle.checked && !sourceEnded) {
+									const now = audioContext.currentTime;
+									const brakeEnd = now + turntableBrakeSeconds;
+									source.playbackRate.setValueAtTime(source.playbackRate.value, now);
+									source.playbackRate.linearRampToValueAtTime(0.001, brakeEnd);
+									output.gain.setValueAtTime(1, brakeEnd - 0.3);
+									output.gain.linearRampToValueAtTime(0, brakeEnd);
+									source.stop(brakeEnd);
+									echoNodes?.startTail();
+									const tailSeconds = echoNodes
+										? Math.max(turntableBrakeSeconds, echoTailSeconds)
+										: turntableBrakeSeconds;
+									tailTimeout = setTimeout(finishTail, (tailSeconds + 0.1) * 1000);
+									return;
+								}
+
+								if (withEffects && echoNodes && !sourceEnded) {
+									echoNodes.startTail();
+									echoNodes.fadeDry();
+									source.stop(audioContext.currentTime + 0.03);
+									tailTimeout = setTimeout(finishTail, (echoTailSeconds + 0.1) * 1000);
+									return;
+								}
+
+								if (!sourceEnded) {
+									source.stop();
+								}
+								clearTimeout(tailTimeout);
+								disconnectAudio();
 								cleanup();
 							}
 						};
 
 						source.onended = () => {
+							sourceEnded = true;
 							source.disconnect();
+
+							if (wasStopped) {
+								return;
+							}
+
+							if (echoNodes) {
+								echoNodes.startTail();
+								tailTimeout = setTimeout(finishTail, echoTailSeconds * 1000);
+								return;
+							}
+
+							output.disconnect();
 							cleanup();
 						};
 
@@ -409,7 +530,7 @@
 			document.addEventListener('keydown', (event) => {
 				if (event.code === 'Space') {
 					event.preventDefault();
-					stopAudio();
+					stopAudio(true);
 					return;
 				}
 
@@ -430,7 +551,7 @@
 				});
 			}
 
-			stop.addEventListener('click', stopAudio);
+			stop.addEventListener('click', () => stopAudio(true));
 			preloadTracks().catch((error) => {
 				console.error('Falló la precarga de audio', error);
 			});

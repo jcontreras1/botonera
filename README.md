@@ -11,6 +11,7 @@ También incluye algunos efectos curiosos y difíciles de encontrar.
 - Efectos raros y divertidos para sorprender a tus amigos.  
 - Interfaz sencilla tipo botonera: hacé clic y soná.  
 - Modo **solapar audios** con switch visual y atajo de teclado **F7**.  
+- Modo **frenar tipo bandeja**: al detener, el audio se ralentiza hasta frenarse como un giradiscos.  
 - Indicador LED rojo en cada botón para ver qué sonido está reproduciéndose.  
 - Funciona en cualquier navegador moderno.  
 

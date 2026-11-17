@@ -46,6 +46,10 @@ body {
     top: 15px;
     right: 20px;
     z-index: 9998;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 0.5rem;
 }
 
 .fancy-checkbox {
